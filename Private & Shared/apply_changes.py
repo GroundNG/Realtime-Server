@@ -21,9 +21,67 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Add Hover Button
+    const hoverBtn = document.createElement("div");
+    hoverBtn.id = "notion-hover-btn";
+    hoverBtn.innerHTML = "+";
+    hoverBtn.style.position = "absolute";
+    hoverBtn.style.width = "20px";
+    hoverBtn.style.height = "20px";
+    hoverBtn.style.borderRadius = "3px";
+    hoverBtn.style.display = "none";
+    hoverBtn.style.alignItems = "center";
+    hoverBtn.style.justifyContent = "center";
+    hoverBtn.style.cursor = "pointer";
+    hoverBtn.style.color = "#aaa";
+    hoverBtn.style.fontSize = "16px";
+    hoverBtn.style.fontWeight = "bold";
+    hoverBtn.style.userSelect = "none";
+    hoverBtn.style.zIndex = "1000";
+    hoverBtn.style.backgroundColor = "transparent";
+    
+    hoverBtn.onmouseover = () => { hoverBtn.style.backgroundColor = "#eee"; hoverBtn.style.color = "#333"; };
+    hoverBtn.onmouseout = () => { hoverBtn.style.backgroundColor = "transparent"; hoverBtn.style.color = "#aaa"; };
+    
+    document.body.appendChild(hoverBtn);
+
+    let currentBlock = null;
+
+    document.addEventListener("mousemove", (e) => {
+        if (!pageBody) return;
+        if (e.target === hoverBtn || hoverBtn.contains(e.target)) return;
+        
+        const block = e.target.closest("p, h1, h2, h3, h4, h5, h6, ul, ol, div.code-wrap, details, summary");
+        if (block && pageBody.contains(block)) {
+            currentBlock = block;
+            const rect = block.getBoundingClientRect();
+            hoverBtn.style.display = "flex";
+            hoverBtn.style.top = (window.scrollY + rect.top + (rect.height / 2) - 10) + "px"; // center vertically
+            hoverBtn.style.left = (window.scrollX + Math.max(0, rect.left - 25)) + "px";
+        } else if (!pageBody.contains(e.target)) {
+            if (currentBlock) {
+                const rect = currentBlock.getBoundingClientRect();
+                if (e.clientX < rect.left - 40 || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+                    hoverBtn.style.display = "none";
+                    currentBlock = null;
+                }
+            }
+        }
+    });
+
+    hoverBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (currentBlock) {
+            const toggleHtml = '<ul class="toggle"><li><details open><summary>New Toggle</summary><div style="display:contents" dir="auto"><p><br></p></div></details></li></ul><p><br></p>';
+            currentBlock.insertAdjacentHTML('afterend', toggleHtml);
+        }
+    });
+
     document.addEventListener("keydown", (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
             e.preventDefault();
+            hoverBtn.remove();
+            
             const currentHTML = document.documentElement.outerHTML;
             fetch("/save", {
                 method: "POST",
@@ -46,6 +104,8 @@ document.addEventListener("DOMContentLoaded", () => {
             }).catch(err => {
                 console.error("Save failed", err);
                 alert("Failed to save!");
+            }).finally(() => {
+                document.body.appendChild(hoverBtn);
             });
             return;
         }
