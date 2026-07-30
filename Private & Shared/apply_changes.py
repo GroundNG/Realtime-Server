@@ -21,6 +21,16 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    function focusElement(el) {
+        el.focus();
+        const sel = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
     // Add Hover Button
     const hoverBtn = document.createElement("div");
     hoverBtn.id = "notion-hover-btn";
@@ -56,7 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
             currentBlock = block;
             const rect = block.getBoundingClientRect();
             hoverBtn.style.display = "flex";
-            hoverBtn.style.top = (window.scrollY + rect.top + (rect.height / 2) - 10) + "px"; // center vertically
+            hoverBtn.style.top = (window.scrollY + rect.top + (rect.height / 2) - 10) + "px";
             hoverBtn.style.left = (window.scrollX + Math.max(0, rect.left - 25)) + "px";
         } else if (!pageBody.contains(e.target)) {
             if (currentBlock) {
@@ -72,8 +82,12 @@ document.addEventListener("DOMContentLoaded", () => {
     hoverBtn.addEventListener("click", (e) => {
         e.preventDefault();
         if (currentBlock) {
-            const toggleHtml = '<ul class="toggle"><li><details open><summary>New Toggle</summary><div style="display:contents" dir="auto"><p><br></p></div></details></li></ul><p><br></p>';
-            currentBlock.insertAdjacentHTML('afterend', toggleHtml);
+            const newToggle = document.createElement("ul");
+            newToggle.className = "toggle";
+            newToggle.innerHTML = '<li><details open><summary>New Toggle</summary><div style="display:contents" dir="auto"><p><br></p></div></details></li>';
+            currentBlock.insertAdjacentElement('afterend', newToggle);
+            const newSum = newToggle.querySelector("summary");
+            if (newSum) focusElement(newSum);
         }
     });
 
@@ -115,9 +129,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!selection.rangeCount) return;
             const range = selection.getRangeAt(0);
             const node = range.startContainer;
-            
             const element = node.nodeType === 3 ? node.parentElement : node;
-            const summary = element.closest ? element.closest('summary') : null;
 
             let isSlashCommand = false;
             
@@ -135,21 +147,70 @@ document.addEventListener("DOMContentLoaded", () => {
                     range.deleteContents();
                     
                     if (isToggle) {
-                        const toggleHtml = '<ul class="toggle"><li><details open><summary>New Toggle</summary><div style="display:contents" dir="auto"><p><br></p></div></details></li></ul><p><br></p>';
-                        document.execCommand('insertHTML', false, toggleHtml);
+                        const newToggle = document.createElement("ul");
+                        newToggle.className = "toggle";
+                        newToggle.innerHTML = '<li><details open><summary>New Toggle</summary><div style="display:contents" dir="auto"><p><br></p></div></details></li>';
+                        const targetBlock = element.closest('p, div[style*="display:contents"], pre, summary, li, ul.toggle') || element;
+                        if (targetBlock && targetBlock.parentElement) {
+                            targetBlock.parentElement.insertBefore(newToggle, targetBlock.nextSibling);
+                        } else {
+                            element.insertAdjacentElement('afterend', newToggle);
+                        }
+                        const newSum = newToggle.querySelector("summary");
+                        if (newSum) focusElement(newSum);
                     } else if (isCode) {
-                        const codeHtml = '<div style="display:contents" dir="auto"><pre class="code code-wrap" style="background: black; color: white; padding: 1em; border-radius: 5px; min-height: 2em;"><code style="background: black; color: white;"></code></pre></div><p><br></p>';
-                        document.execCommand('insertHTML', false, codeHtml);
+                        const newCode = document.createElement("div");
+                        newCode.setAttribute("style", "display:contents");
+                        newCode.setAttribute("dir", "auto");
+                        newCode.innerHTML = '<pre class="code code-wrap" style="background: black; color: white; padding: 1em; border-radius: 5px; min-height: 2em;"><code style="background: black; color: white;"><br></code></pre>';
+                        const targetBlock = element.closest('p, div[style*="display:contents"], pre, summary') || element;
+                        if (targetBlock && targetBlock.parentElement) {
+                            targetBlock.parentElement.insertBefore(newCode, targetBlock.nextSibling);
+                        } else {
+                            element.insertAdjacentElement('afterend', newCode);
+                        }
+                        const codeEl = newCode.querySelector("code");
+                        if (codeEl) focusElement(codeEl);
                     }
+                    return;
                 }
             }
 
-            if (!isSlashCommand && summary) {
-                e.preventDefault();
-                if (e.key === ' ') {
-                    document.execCommand('insertText', false, ' ');
-                } else {
-                    document.execCommand('insertHTML', false, '<br>');
+            if (!isSlashCommand && e.key === 'Enter') {
+                const summary = element.closest ? element.closest('summary') : null;
+                const details = element.closest ? element.closest('details') : null;
+
+                if (summary) {
+                    // Enter inside <summary> -> Add a NEW TOGGLE LIST BLOCK
+                    e.preventDefault();
+                    const currentToggleItem = summary.closest('li') || summary.closest('ul.toggle') || details;
+                    const newToggle = document.createElement("ul");
+                    newToggle.className = "toggle";
+                    newToggle.innerHTML = '<li><details open><summary>New Toggle</summary><div style="display:contents" dir="auto"><p><br></p></div></details></li>';
+
+                    if (currentToggleItem && currentToggleItem.parentElement) {
+                        currentToggleItem.parentElement.insertBefore(newToggle, currentToggleItem.nextSibling);
+                    } else {
+                        summary.insertAdjacentElement('afterend', newToggle);
+                    }
+                    const newSum = newToggle.querySelector("summary");
+                    if (newSum) focusElement(newSum);
+                } else if (details) {
+                    // Enter inside <details> body -> Add a NEW LINE inside the toggle block
+                    e.preventDefault();
+                    const currentLineBlock = element.closest('div[style*="display:contents"], p, pre') || element;
+                    const newLineDiv = document.createElement("div");
+                    newLineDiv.setAttribute("style", "display:contents");
+                    newLineDiv.setAttribute("dir", "auto");
+                    newLineDiv.innerHTML = '<p><br></p>';
+
+                    if (currentLineBlock && currentLineBlock.parentElement && details.contains(currentLineBlock.parentElement)) {
+                        currentLineBlock.parentElement.insertBefore(newLineDiv, currentLineBlock.nextSibling);
+                    } else {
+                        details.appendChild(newLineDiv);
+                    }
+                    const newP = newLineDiv.querySelector("p");
+                    if (newP) focusElement(newP);
                 }
             }
         }
